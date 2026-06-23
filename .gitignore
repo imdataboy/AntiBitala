@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+.env
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Data files
+data/raw/
+data/staging/
+data/exports/
+*.duckdb
+*.sqlite
+*.db
+
+# Logs
+*.log

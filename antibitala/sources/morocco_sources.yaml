@@ -1,0 +1,429 @@
+sources:
+  # -------------------------
+  # National base sources
+  # -------------------------
+
+  - source_key: geofabrik_morocco_osm
+    source_name: Geofabrik Morocco OpenStreetMap Extract
+    source_type: open_geographic_data
+    country: Morocco
+    region: null
+    city: null
+    sector: general
+    coverage_scope: national
+    reliability_level: medium
+    access_method: downloadable_file
+    base_url: https://download.geofabrik.de/africa/morocco.html
+    enabled: true
+    update_frequency: quarterly
+    notes: National OSM extract. Useful for businesses, offices, factories, shops, coordinates, and addresses. Coverage varies by city.
+
+  - source_key: industrial_estate_morocco
+    source_name: Industrial Estate Morocco
+    source_type: official_industrial_zone_platform
+    country: Morocco
+    region: null
+    city: null
+    sector: industry
+    coverage_scope: national_industrial
+    reliability_level: high
+    access_method: web_adapter
+    base_url: https://industrial-estate.gov.ma/
+    enabled: true
+    update_frequency: quarterly
+    notes: National platform for industrial zones and industrial land in Morocco.
+
+  - source_key: amdie_economic_zones
+    source_name: AMDIE Economic Activity Zones
+    source_type: official_investment_source
+    country: Morocco
+    region: null
+    city: null
+    sector: investment
+    coverage_scope: national
+    reliability_level: high
+    access_method: web_adapter
+    base_url: https://amdie.gov.ma/
+    enabled: true
+    update_frequency: quarterly
+    notes: National investment and economic zone information.
+
+  - source_key: ompic_rcc
+    source_name: OMPIC RCC / DirectInfo
+    source_type: official_legal_registry
+    country: Morocco
+    region: null
+    city: null
+    sector: legal_registry
+    coverage_scope: national
+    reliability_level: very_high
+    access_method: manual_or_web_adapter
+    base_url: https://www.ompic.ma/
+    enabled: true
+    update_frequency: quarterly
+    notes: Legal verification source. Use carefully depending on available public access.
+
+  - source_key: wikidata_morocco_companies
+    source_name: Wikidata Morocco Companies
+    source_type: open_knowledge_graph
+    country: Morocco
+    region: null
+    city: null
+    sector: general
+    coverage_scope: national_notable_companies
+    reliability_level: medium_high
+    access_method: sparql_api
+    base_url: https://query.wikidata.org/
+    enabled: true
+    update_frequency: quarterly
+    notes: Useful for large and notable companies. Not complete for SMEs.
+
+  # -------------------------
+  # Multi-city tech/startup sources
+  # -------------------------
+
+  - source_key: technopark_maroc
+    source_name: Technopark Maroc
+    source_type: tech_startup_ecosystem
+    country: Morocco
+    region: multi_region
+    city: multi_city
+    sector: tech_startups
+    coverage_scope: multi_city
+    reliability_level: high
+    access_method: web_adapter
+    base_url: https://www.technopark.ma/
+    enabled: true
+    update_frequency: quarterly
+    notes: Important source for startups, software, IT, digital, AI, and innovation companies across several Moroccan cities.
+
+  # -------------------------
+  # Finance / business ecosystem
+  # -------------------------
+
+  - source_key: casablanca_finance_city
+    source_name: Casablanca Finance City
+    source_type: finance_business_ecosystem
+    country: Morocco
+    region: Casablanca-Settat
+    city: Casablanca
+    sector: finance_consulting_headquarters
+    coverage_scope: regional_sector
+    reliability_level: high
+    access_method: web_adapter
+    base_url: https://casablancafinancecity.com/
+    enabled: true
+    update_frequency: quarterly
+    notes: Useful for finance, consulting, regional headquarters, legal, advisory, and corporate service companies.
+
+  # -------------------------
+  # Industrial and business parks
+  # -------------------------
+
+  - source_key: medz_industrial_parks
+    source_name: MEDZ Industrial and Business Parks
+    source_type: industrial_business_parks
+    country: Morocco
+    region: multi_region
+    city: multi_city
+    sector: industry_services_offshoring
+    coverage_scope: multi_region
+    reliability_level: high
+    access_method: web_adapter
+    base_url: https://www.medz.ma/
+    enabled: true
+    update_frequency: quarterly
+    notes: Important for industrial parks, business parks, offshoring zones, and regional economic zones.
+
+  - source_key: tanger_med_zones
+    source_name: Tanger Med Zones
+    source_type: industrial_zone_operator
+    country: Morocco
+    region: Tanger-Tetouan-Al Hoceima
+    city: Tangier
+    sector: automotive_logistics_industry
+    coverage_scope: regional_sector
+    reliability_level: very_high
+    access_method: web_adapter
+    base_url: https://www.tangermedzones.com/
+    enabled: true
+    update_frequency: quarterly
+    notes: High-quality source for northern Morocco industrial, automotive, logistics, and export companies. Must not be treated as national coverage.
+
+  - source_key: midparc
+    source_name: MidParc
+    source_type: industrial_zone
+    country: Morocco
+    region: Casablanca-Settat
+    city: Nouaceur
+    sector: aerospace_industry
+    coverage_scope: regional_sector
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Aerospace and high-value industrial ecosystem near Casablanca. Base URL to verify before adapter implementation.
+
+  - source_key: atlantic_free_zone
+    source_name: Atlantic Free Zone
+    source_type: industrial_zone
+    country: Morocco
+    region: Rabat-Sale-Kenitra
+    city: Kenitra
+    sector: automotive_industry
+    coverage_scope: regional_sector
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Important for automotive and industrial employment around Kenitra. Base URL to verify before adapter implementation.
+
+  # -------------------------
+  # Offshoring / technology parks
+  # -------------------------
+
+  - source_key: casanearshore
+    source_name: Casanearshore
+    source_type: offshoring_business_park
+    country: Morocco
+    region: Casablanca-Settat
+    city: Casablanca
+    sector: offshoring_it_services
+    coverage_scope: regional_sector
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Useful for IT services, BPO, consulting, and offshoring companies.
+
+  - source_key: technopolis_rabat
+    source_name: Technopolis Rabat
+    source_type: technology_business_park
+    country: Morocco
+    region: Rabat-Sale-Kenitra
+    city: Rabat
+    sector: technology_offshoring
+    coverage_scope: regional_sector
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Useful for tech, IT services, and offshoring companies around Rabat.
+
+  - source_key: fes_shore
+    source_name: Fes Shore
+    source_type: offshoring_business_park
+    country: Morocco
+    region: Fes-Meknes
+    city: Fes
+    sector: offshoring_it_services
+    coverage_scope: regional_sector
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Useful for offshoring and IT services in Fes-Meknes.
+
+  - source_key: oujda_shore
+    source_name: Oujda Shore
+    source_type: offshoring_business_park
+    country: Morocco
+    region: Oriental
+    city: Oujda
+    sector: offshoring_it_services
+    coverage_scope: regional_sector
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Useful for offshoring and services in Oriental region.
+
+  # -------------------------
+  # Regional investment centers
+  # -------------------------
+
+  - source_key: cri_casablanca_settat
+    source_name: CRI Casablanca-Settat
+    source_type: regional_investment_center
+    country: Morocco
+    region: Casablanca-Settat
+    city: Casablanca
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source. Adapter should collect regional zones, sectors, and official ecosystem links.
+
+  - source_key: cri_rabat_sale_kenitra
+    source_name: CRI Rabat-Sale-Kenitra
+    source_type: regional_investment_center
+    country: Morocco
+    region: Rabat-Sale-Kenitra
+    city: Rabat
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Rabat, Sale, and Kenitra economic ecosystem.
+
+  - source_key: cri_tanger_tetouan_alhoceima
+    source_name: CRI Tanger-Tetouan-Al Hoceima
+    source_type: regional_investment_center
+    country: Morocco
+    region: Tanger-Tetouan-Al Hoceima
+    city: Tangier
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for northern Morocco. Must be balanced with other CRI sources.
+
+  - source_key: cri_marrakech_safi
+    source_name: CRI Marrakech-Safi
+    source_type: regional_investment_center
+    country: Morocco
+    region: Marrakech-Safi
+    city: Marrakech
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Marrakech-Safi.
+
+  - source_key: cri_souss_massa
+    source_name: CRI Souss-Massa
+    source_type: regional_investment_center
+    country: Morocco
+    region: Souss-Massa
+    city: Agadir
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Souss-Massa, including Agadir and regional industrial ecosystems.
+
+  - source_key: cri_fes_meknes
+    source_name: CRI Fes-Meknes
+    source_type: regional_investment_center
+    country: Morocco
+    region: Fes-Meknes
+    city: Fes
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Fes-Meknes.
+
+  - source_key: cri_oriental
+    source_name: CRI Oriental
+    source_type: regional_investment_center
+    country: Morocco
+    region: Oriental
+    city: Oujda
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Oriental region.
+
+  - source_key: cri_beni_mellal_khenifra
+    source_name: CRI Beni Mellal-Khenifra
+    source_type: regional_investment_center
+    country: Morocco
+    region: Beni Mellal-Khenifra
+    city: Beni Mellal
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Beni Mellal-Khenifra.
+
+  - source_key: cri_draa_tafilalet
+    source_name: CRI Draa-Tafilalet
+    source_type: regional_investment_center
+    country: Morocco
+    region: Draa-Tafilalet
+    city: Errachidia
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Draa-Tafilalet.
+
+  - source_key: cri_guelmim_oued_noun
+    source_name: CRI Guelmim-Oued Noun
+    source_type: regional_investment_center
+    country: Morocco
+    region: Guelmim-Oued Noun
+    city: Guelmim
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Guelmim-Oued Noun.
+
+  - source_key: cri_laayoune_sakia_el_hamra
+    source_name: CRI Laayoune-Sakia El Hamra
+    source_type: regional_investment_center
+    country: Morocco
+    region: Laayoune-Sakia El Hamra
+    city: Laayoune
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Laayoune-Sakia El Hamra.
+
+  - source_key: cri_dakhla_oued_eddahab
+    source_name: CRI Dakhla-Oued Ed-Dahab
+    source_type: regional_investment_center
+    country: Morocco
+    region: Dakhla-Oued Ed-Dahab
+    city: Dakhla
+    sector: regional_economy
+    coverage_scope: regional
+    reliability_level: high
+    access_method: web_adapter
+    base_url: null
+    enabled: true
+    update_frequency: quarterly
+    notes: Regional source for Dakhla-Oued Ed-Dahab.

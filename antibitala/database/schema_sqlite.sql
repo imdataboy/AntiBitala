@@ -31,6 +31,26 @@ CREATE TABLE IF NOT EXISTS companies (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS data_sources (
+    source_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_key TEXT UNIQUE NOT NULL,
+    source_name TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    country TEXT DEFAULT 'Morocco',
+    region TEXT,
+    city TEXT,
+    sector TEXT,
+    coverage_scope TEXT NOT NULL,
+    reliability_level TEXT NOT NULL,
+    access_method TEXT,
+    base_url TEXT,
+    enabled INTEGER DEFAULT 1,
+    update_frequency TEXT DEFAULT 'quarterly',
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS company_sources (
     source_id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id INTEGER NOT NULL,
@@ -108,3 +128,8 @@ CREATE INDEX IF NOT EXISTS idx_companies_trust ON companies(trust_score);
 CREATE INDEX IF NOT EXISTS idx_companies_job_relevance ON companies(job_relevance_score);
 CREATE INDEX IF NOT EXISTS idx_sources_company_id ON company_sources(company_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_company_id ON company_contacts(company_id);
+
+CREATE INDEX IF NOT EXISTS idx_data_sources_key ON data_sources(source_key);
+CREATE INDEX IF NOT EXISTS idx_data_sources_type ON data_sources(source_type);
+CREATE INDEX IF NOT EXISTS idx_data_sources_region ON data_sources(region);
+CREATE INDEX IF NOT EXISTS idx_data_sources_enabled ON data_sources(enabled);

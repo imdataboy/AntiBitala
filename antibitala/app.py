@@ -29,11 +29,12 @@ def main() -> None:
 
     st.divider()
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Companies", stats["companies"])
-    col2.metric("Sources", stats["sources"])
-    col3.metric("Contacts", stats["contacts"])
-    col4.metric("Zones", stats["zones"])
+    col2.metric("Configured sources", stats["configured_sources"])
+    col3.metric("Company-source links", stats["company_sources"])
+    col4.metric("Contacts", stats["contacts"])
+    col5.metric("Zones", stats["zones"])
 
     st.caption(f"Database path: `{DB_PATH}`")
 

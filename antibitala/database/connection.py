@@ -51,7 +51,8 @@ def get_database_stats(db_path: Path | None = None) -> dict[str, int]:
     if not path.exists():
         return {
             "companies": 0,
-            "sources": 0,
+            "company_sources": 0,
+            "configured_sources": 0,
             "contacts": 0,
             "zones": 0,
         }
@@ -59,7 +60,12 @@ def get_database_stats(db_path: Path | None = None) -> dict[str, int]:
     with get_connection(path) as conn:
         stats = {
             "companies": conn.execute("SELECT COUNT(*) FROM companies").fetchone()[0],
-            "sources": conn.execute("SELECT COUNT(*) FROM company_sources").fetchone()[0],
+            "company_sources": conn.execute(
+                "SELECT COUNT(*) FROM company_sources"
+            ).fetchone()[0],
+            "configured_sources": conn.execute(
+                "SELECT COUNT(*) FROM data_sources"
+            ).fetchone()[0],
             "contacts": conn.execute("SELECT COUNT(*) FROM company_contacts").fetchone()[0],
             "zones": conn.execute("SELECT COUNT(*) FROM zones").fetchone()[0],
         }

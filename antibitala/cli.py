@@ -8,6 +8,7 @@ import click
 
 from antibitala.database.connection import DB_PATH, init_sqlite_database
 from antibitala.sources.registry import list_data_sources, seed_data_sources
+from antibitala.sources.technopark import fetch_and_store_technopark
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -68,3 +69,91 @@ def list_sources(enabled_only: bool) -> None:
             f"{source['coverage_scope']} | "
             f"{source['reliability_level']}"
         )
+
+
+@main.command("fetch-technopark")
+@click.option("--limit", type=int, default=None, help="Maximum records to fetch.")
+def fetch_technopark(limit: int | None) -> None:
+    """Fetch companies from Technopark Maroc."""
+    init_sqlite_database()
+    count = fetch_and_store_technopark(limit=limit)
+    click.echo(f"Fetched and stored {count} Technopark records.")
+
+
+@main.command("list-companies")
+@click.option("--limit", type=int, default=20, help="Maximum companies to show.")
+def list_companies(limit: int) -> None:
+    """List companies stored in the local database."""
+    from antibitala.database.connection import get_connection
+
+    init_sqlite_database()
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                company_id,
+                company_name,
+                city,
+                region,
+                sector_primary,
+                trust_score,
+                job_relevance_score,
+                source_count
+            FROM companies
+            ORDER BY company_id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    if not rows:
+        click.echo("No companies found yet.")
+        return
+
+    for row in rows:
+        click.echo(
+            f"{row['company_id']} | {row['company_name']} | "
+            f"{row['city'] or '-'} | {row['sector_primary'] or '-'} | "
+            f"trust={row['trust_score']} | relevance={row['job_relevance_score']} | "
+            f"sources={row['source_count']}"
+        )
+
+@main.command("reset-source-data")
+@click.argument("source_name")
+def reset_source_data(source_name: str) -> None:
+    """Delete companies and source links collected from one source."""
+    from antibitala.database.connection import get_connection
+
+    init_sqlite_database()
+
+    with get_connection() as conn:
+        company_ids = [
+            row["company_id"]
+            for row in conn.execute(
+                """
+                SELECT DISTINCT company_id
+                FROM company_sources
+                WHERE source_name = ?
+                """,
+                (source_name,),
+            ).fetchall()
+        ]
+
+        if not company_ids:
+            click.echo(f"No companies found for source: {source_name}")
+            return
+
+        placeholders = ",".join("?" for _ in company_ids)
+
+        conn.execute(
+            f"DELETE FROM company_sources WHERE company_id IN ({placeholders})",
+            company_ids,
+        )
+        conn.execute(
+            f"DELETE FROM companies WHERE company_id IN ({placeholders})",
+            company_ids,
+        )
+        conn.commit()
+
+    click.echo(f"Deleted {len(company_ids)} companies from source: {source_name}")

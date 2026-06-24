@@ -5,15 +5,16 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.parse import urlparse
-from pathlib import Path
+from playwright.sync_api import sync_playwright
 
-from playwright.sync_api import Page, sync_playwright
+from bs4 import BeautifulSoup
 
 from antibitala.database.connection import get_connection
 
 
 TECHNOPARK_SOURCE_KEY = "technopark_maroc"
 TECHNOPARK_STARTUPS_URL = "https://www.technopark.ma/start-ups-du-mois/#/"
+TECHNOPARK_API_URL = "https://www.technopark.ma/wp-json/monapp/v1/entreprises"
 
 CITY_TO_REGION = {
     "casablanca": "Casablanca-Settat",
@@ -32,10 +33,12 @@ class CompanyCandidate:
     region: str | None = None
     sector_primary: str | None = "tech_startups"
     sector_secondary: str | None = None
-    company_type: str | None = "startup"
+    company_type: str | None = "technopark_member"
     website: str | None = None
     public_email: str | None = None
     phone: str | None = None
+    description: str | None = None
+    source_external_id: str | None = None
 
 
 def normalize_name(name: str) -> str:
@@ -43,23 +46,90 @@ def normalize_name(name: str) -> str:
     cleaned = name.strip().lower()
     cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = re.sub(r"\b(sarl|sa|sas|maroc|morocco|ltd|llc)\b", "", cleaned)
-    cleaned = re.sub(r"[^a-z0-9àâçéèêëîïôûùüÿñæœ\s'-]", "", cleaned)
+    cleaned = re.sub(r"[^a-z0-9àâçéèêëîïôûùüÿñæœ\s'.-]", "", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip()
 
 
+def clean_text(text: str | None) -> str | None:
+    """Clean plain text."""
+    if not text:
+        return None
+
+    cleaned = re.sub(r"\s+", " ", text.strip())
+    return cleaned or None
+
+
+def html_to_text(html: str | None) -> str | None:
+    """Convert small HTML description to text."""
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+    return clean_text(soup.get_text(" ", strip=True))
+
+
 def extract_domain(url: str | None) -> str | None:
-    """Extract domain from URL."""
+    """Extract domain from URL safely."""
     if not url:
         return None
 
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+
     domain = parsed.netloc.lower().replace("www.", "")
     return domain or None
 
+def normalize_website(url: str | None) -> str | None:
+    """Normalize website URL safely."""
+    cleaned = clean_text(url)
 
-def clean_line(text: str) -> str:
-    return re.sub(r"\s+", " ", text.strip())
+    if not cleaned:
+        return None
+
+    lowered = cleaned.lower()
+
+    invalid_values = {
+        "#",
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "-",
+        "--",
+    }
+
+    if lowered in invalid_values:
+        return None
+
+    # Handle multilingual WordPress-like values:
+    # [:fr]http://example.com/[:en]www.example.com[:]
+    url_match = re.search(r"https?://[^\s\[\]]+|www\.[^\s\[\]]+", cleaned)
+
+    if url_match:
+        cleaned = url_match.group(0)
+    else:
+        cleaned = cleaned.split()[0].strip()
+
+    cleaned = cleaned.strip(".,;:)")
+
+    if not cleaned.startswith(("http://", "https://")):
+        cleaned = f"https://{cleaned}"
+
+    try:
+        parsed = urlparse(cleaned)
+    except ValueError:
+        return None
+
+    if not parsed.netloc:
+        return None
+
+    if "[" in parsed.netloc or "]" in parsed.netloc:
+        return None
+
+    return cleaned
 
 
 def get_region_from_city(city: str | None) -> str | None:
@@ -69,181 +139,9 @@ def get_region_from_city(city: str | None) -> str | None:
     return CITY_TO_REGION.get(city.strip().lower())
 
 
-def is_valid_company_name(text: str) -> bool:
-    """Avoid menu/footer labels and section titles."""
-    text = clean_line(text)
-
-    if len(text) < 2 or len(text) > 80:
-        return False
-
-    lowered = text.lower()
-
-    blocked = {
-        "accueil",
-        "technopark",
-        "services",
-        "startups",
-        "startup",
-        "media",
-        "média",
-        "se connecter",
-        "réseau technopark",
-        "reseau technopark",
-        "découvrez nos startups",
-        "decouvrez nos startups",
-        "secteur d'activite",
-        "secteur d’activité",
-        "technologies",
-        "site",
-        "description",
-        "voir details",
-        "voir détails",
-    }
-
-    if lowered in blocked:
-        return False
-
-    if "@" in lowered:
-        return False
-
-    if any(word in lowered for word in ["contact", "presse", "photothèque", "phototheque"]):
-        return False
-
-    return True
-
-
-def extract_field(lines: list[str], label_variants: set[str]) -> str | None:
-    """Extract value after a label line."""
-    lowered_lines = [line.lower() for line in lines]
-
-    for index, line in enumerate(lowered_lines):
-        if line in label_variants:
-            for value in lines[index + 1 :]:
-                lowered_value = value.lower()
-                if lowered_value in {
-                    "secteur d'activite",
-                    "secteur d’activité",
-                    "technologies",
-                    "site",
-                    "description",
-                }:
-                    return None
-                return value
-
-    return None
-
-
-def extract_contact_links(page: Page) -> tuple[str | None, str | None, str | None]:
-    """Extract website, email, and phone from rendered detail page."""
-    website = None
-    email = None
-    phone = None
-
-    links = page.locator("a").evaluate_all(
-        """
-        elements => elements.map(a => ({
-            href: a.href || "",
-            text: a.innerText || ""
-        }))
-        """
-    )
-
-    for link in links:
-        href = link["href"].strip()
-
-        if href.startswith("mailto:") and email is None:
-            email = href.replace("mailto:", "").strip()
-
-        elif href.startswith("tel:") and phone is None:
-            phone = href.replace("tel:", "").strip()
-
-        elif href.startswith("http") and website is None:
-            domain = extract_domain(href)
-
-            blocked_domains = {
-                "facebook.com",
-                "linkedin.com",
-                "instagram.com",
-                "youtube.com",
-                "twitter.com",
-                "x.com",
-            }
-
-            if (
-                domain
-                and "technopark.ma" not in domain
-                and not any(blocked in domain for blocked in blocked_domains)
-            ):
-                website = href
-
-    return website, email, phone
-
-
-def parse_detail_page(page: Page) -> CompanyCandidate | None:
-    """Parse one rendered Technopark startup detail page."""
-    company_name = clean_line(
-        page.locator(".companyDetailsWrapper h2").first.inner_text(timeout=10_000)
-    )
-
-    if not is_valid_company_name(company_name):
-        return None
-
-    details = page.locator(".companyDetailsWrapper > div")
-    detail_count = details.count()
-
-    founder = None
-    sector = None
-    technologies = None
-    city = None
-
-    for index in range(detail_count):
-        block = details.nth(index)
-        block_text = clean_line(block.inner_text())
-
-        if index == 0:
-            labels = block.locator("label")
-            if labels.count() > 0:
-                founder = clean_line(labels.first.inner_text())
-
-        lowered = block_text.lower()
-
-        if "secteur" in lowered:
-            paragraphs = block.locator("p")
-            if paragraphs.count() > 0:
-                sector = clean_line(paragraphs.first.inner_text())
-
-        elif "technologies" in lowered:
-            paragraphs = block.locator("p")
-            if paragraphs.count() > 0:
-                technologies = clean_line(paragraphs.first.inner_text())
-
-        elif lowered.startswith("site") or "\nsite" in lowered:
-            paragraphs = block.locator("p")
-            if paragraphs.count() > 0:
-                city = clean_line(paragraphs.first.inner_text())
-
-    region = get_region_from_city(city)
-    website, email, phone = extract_contact_links(page)
-
-    return CompanyCandidate(
-        company_name=company_name,
-        source_url=page.url,
-        city=city,
-        region=region,
-        sector_primary=sector or "tech_startups",
-        sector_secondary=technologies,
-        website=website,
-        public_email=email,
-        phone=phone,
-    )
-
-
-def fetch_technopark_candidates(limit: int | None = None) -> list[CompanyCandidate]:
-    """Render Technopark page in Chromium and collect startup details."""
-    candidates: list[CompanyCandidate] = []
-
-    debug_dir = Path("data/raw/technopark")
-    debug_dir.mkdir(parents=True, exist_ok=True)
+def fetch_technopark_api_records() -> list[dict]:
+    """Fetch all Technopark companies from browser-captured JSON API."""
+    api_url_part = "/wp-json/monapp/v1/entreprises"
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
@@ -256,7 +154,7 @@ def fetch_technopark_candidates(limit: int | None = None) -> list[CompanyCandida
         )
 
         context = browser.new_context(
-            viewport={"width": 1400, "height": 1200},
+            viewport={"width": 1400, "height": 1600},
             user_agent=(
                 "Mozilla/5.0 (X11; Linux x86_64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -267,65 +165,118 @@ def fetch_technopark_candidates(limit: int | None = None) -> list[CompanyCandida
 
         page = context.new_page()
 
-        page.goto(TECHNOPARK_STARTUPS_URL, wait_until="domcontentloaded", timeout=60_000)
+        api_payload: dict | None = None
 
-        # Do not wait for #root to be visible. It can be attached but hidden.
+        def capture_response(response) -> None:
+            nonlocal api_payload
+
+            if api_url_part not in response.url:
+                return
+
+            content_type = response.headers.get("content-type", "")
+
+            if "application/json" not in content_type:
+                return
+
+            try:
+                api_payload = response.json()
+            except Exception:
+                api_payload = None
+
+        page.on("response", capture_response)
+
+        page.goto(TECHNOPARK_STARTUPS_URL, wait_until="domcontentloaded", timeout=60_000)
         page.wait_for_selector("#root", state="attached", timeout=60_000)
 
-        # Wait for React app to render real cards.
-        try:
-            page.wait_for_selector(
-                "button:has-text('Voir Details')",
-                state="visible",
-                timeout=60_000,
-            )
-        except Exception:
-            page.screenshot(path=str(debug_dir / "technopark_no_buttons.png"), full_page=True)
-            (debug_dir / "technopark_no_buttons.html").write_text(
-                page.content(),
-                encoding="utf-8",
-            )
-            print("No visible 'Voir Details' buttons detected.")
-            print("Debug saved in data/raw/technopark/")
-            browser.close()
-            return candidates
+        # Wait for the React app to call the API.
+        page.wait_for_selector(
+            "button:has-text('Voir Details')",
+            state="visible",
+            timeout=60_000,
+        )
 
-        detail_buttons = page.locator("button:has-text('Voir Details')")
-        button_count = detail_buttons.count()
-
-        print(f"Detected Technopark detail buttons: {button_count}")
-
-        max_items = min(button_count, limit or button_count)
-
-        for index in range(max_items):
-            page.goto(TECHNOPARK_STARTUPS_URL, wait_until="domcontentloaded", timeout=60_000)
-            page.wait_for_selector("#root", state="attached", timeout=60_000)
-            page.wait_for_selector(
-                "button:has-text('Voir Details')",
-                state="visible",
-                timeout=60_000,
-            )
-
-            detail_buttons = page.locator("button:has-text('Voir Details')")
-
-            if index >= detail_buttons.count():
-                break
-
-            button = detail_buttons.nth(index)
-            button.scroll_into_view_if_needed(timeout=30_000)
-            button.click(timeout=30_000)
-
-            page.wait_for_selector(".companyDetailsWrapper h2", timeout=30_000)
-
-            candidate = parse_detail_page(page)
-
-            if candidate and normalize_name(candidate.company_name):
-                print(f"Collected: {candidate.company_name}")
-                candidates.append(candidate)
+        page.wait_for_timeout(2_000)
 
         browser.close()
 
+    if not api_payload:
+        raise RuntimeError("Technopark API payload was not captured in browser context.")
+
+    if not api_payload.get("success"):
+        raise RuntimeError(f"Technopark API returned unsuccessful payload: {api_payload}")
+
+    data = api_payload.get("data", [])
+
+    if not isinstance(data, list):
+        raise RuntimeError("Technopark API payload field 'data' is not a list.")
+
+    return data
+
+def record_to_candidate(record: dict) -> CompanyCandidate | None:
+    """Map one Technopark API record to internal candidate."""
+    company_name = clean_text(record.get("EntrepriseName"))
+
+    if not company_name:
+        return None
+
+    city = clean_text(record.get("EntrepriseVille"))
+    region = get_region_from_city(city)
+
+    website = normalize_website(record.get("EntrepriseContactSiteWeb"))
+    email = clean_text(record.get("EntrepriseContactEmail"))
+    phone = clean_text(record.get("EntrepriseContactPhone"))
+
+    sector = clean_text(record.get("EntrepriseSecteurActivite"))
+    technologies = clean_text(record.get("EntrepriseTechnologie"))
+    description = html_to_text(record.get("Activite"))
+
+    external_id = clean_text(record.get("Id"))
+
+    source_url = TECHNOPARK_API_URL
+    if external_id:
+        source_url = f"{TECHNOPARK_API_URL}#{external_id}"
+
+    return CompanyCandidate(
+        company_name=company_name,
+        source_url=source_url,
+        city=city,
+        region=region,
+        sector_primary=sector or "tech_startups",
+        sector_secondary=technologies,
+        website=website,
+        public_email=email,
+        phone=phone,
+        description=description,
+        source_external_id=external_id,
+    )
+
+
+def fetch_technopark_candidates(limit: int | None = None) -> list[CompanyCandidate]:
+    """Fetch Technopark companies from API."""
+    records = fetch_technopark_api_records()
+    candidates: list[CompanyCandidate] = []
+    seen_names: set[str] = set()
+
+    for record in records:
+        if limit is not None and len(candidates) >= limit:
+            break
+
+        candidate = record_to_candidate(record)
+
+        if not candidate:
+            continue
+
+        normalized = normalize_name(candidate.company_name)
+
+        if not normalized or normalized in seen_names:
+            continue
+
+        seen_names.add(normalized)
+        candidates.append(candidate)
+
+    print(f"Fetched {len(candidates)} Technopark candidates from API.")
     return candidates
+
 
 def get_source_id(conn: sqlite3.Connection) -> int | None:
     """Return data_sources.source_id for Technopark if seeded."""
@@ -347,13 +298,13 @@ def upsert_company(conn: sqlite3.Connection, candidate: CompanyCandidate) -> int
         raise ValueError(f"Invalid company name: {candidate.company_name!r}")
 
     existing = conn.execute(
-    """
-    SELECT company_id
-    FROM companies
-    WHERE normalized_name = ?
-    LIMIT 1
-    """,
-    (normalized_name,),
+        """
+        SELECT company_id
+        FROM companies
+        WHERE normalized_name = ?
+        LIMIT 1
+        """,
+        (normalized_name,),
     ).fetchone()
 
     if existing:
@@ -362,15 +313,15 @@ def upsert_company(conn: sqlite3.Connection, candidate: CompanyCandidate) -> int
             """
             UPDATE companies
             SET
-                website = COALESCE(website, ?),
-                domain = COALESCE(domain, ?),
-                public_email = COALESCE(public_email, ?),
-                phone = COALESCE(phone, ?),
-                city = COALESCE(city, ?),
-                region = COALESCE(region, ?),
-                sector_primary = COALESCE(sector_primary, ?),
-                sector_secondary = COALESCE(sector_secondary, ?),
-                company_type = COALESCE(company_type, ?),
+                website = COALESCE(?, website),
+                domain = COALESCE(?, domain),
+                public_email = COALESCE(?, public_email),
+                phone = COALESCE(?, phone),
+                city = COALESCE(?, city),
+                region = COALESCE(?, region),
+                sector_primary = COALESCE(?, sector_primary),
+                sector_secondary = COALESCE(?, sector_secondary),
+                company_type = COALESCE(?, company_type),
                 last_seen_date = ?,
                 last_checked_date = ?,
                 updated_at = CURRENT_TIMESTAMP
@@ -416,7 +367,7 @@ def upsert_company(conn: sqlite3.Connection, candidate: CompanyCandidate) -> int
             last_checked_date,
             status
         )
-        VALUES (?, ?, ?, ?, 'Morocco', ?, ?, ?, ?, ?, ?, ?, 75, 70, 1, ?, ?, ?, 'active')
+        VALUES (?, ?, ?, ?, 'Morocco', ?, ?, ?, ?, ?, ?, ?, 85, 80, 1, ?, ?, ?, 'active')
         """,
         (
             candidate.company_name,
@@ -437,6 +388,7 @@ def upsert_company(conn: sqlite3.Connection, candidate: CompanyCandidate) -> int
     )
 
     return int(cursor.lastrowid)
+
 
 def link_company_source(
     conn: sqlite3.Connection,
@@ -531,7 +483,7 @@ def fetch_and_store_technopark(limit: int | None = None) -> int:
             (
                 "technopark_maroc",
                 inserted_or_updated,
-                f"Fetched rendered startup cards from {TECHNOPARK_STARTUPS_URL}",
+                f"Fetched from API {TECHNOPARK_API_URL}",
             ),
         )
 

@@ -9,6 +9,7 @@ import click
 from antibitala.database.connection import DB_PATH, init_sqlite_database
 from antibitala.sources.registry import list_data_sources, seed_data_sources
 from antibitala.sources.technopark import fetch_and_store_technopark
+from antibitala.exporters import export_companies
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -157,3 +158,28 @@ def reset_source_data(source_name: str) -> None:
         conn.commit()
 
     click.echo(f"Deleted {len(company_ids)} companies from source: {source_name}")
+
+@main.command("export")
+@click.option(
+    "--format",
+    "export_format",
+    type=click.Choice(["csv", "excel", "xlsx"]),
+    default="csv",
+    show_default=True,
+    help="Export format.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Optional output file path.",
+)
+def export_data(export_format: str, output_path: Path | None) -> None:
+    """Export companies to CSV or Excel."""
+    path = export_companies(
+        export_format=export_format,
+        output_path=output_path,
+    )
+
+    click.echo(f"Exported companies to: {path}")

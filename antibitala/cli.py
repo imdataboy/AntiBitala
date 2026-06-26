@@ -16,6 +16,17 @@ from antibitala.sources.industrial_estate import import_industrial_estate_zones,
 from antibitala.sources.company_zone_linker import get_company_zone_link_stats, link_companies_to_zones, migrate_company_zone_schema, sample_company_zone_links
 from antibitala.sources.contact_sync import get_contact_stats, sample_contacts, sync_company_contacts
 from antibitala.sources.regional_ecosystems import get_regional_source_summary, get_regional_sources, validate_regional_source_coverage
+from antibitala.sources.source_health import check_regional_source_health, summarize_health_results
+
+
+
+
+
+
+
+
+
+
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -500,4 +511,40 @@ def validate_regional_coverage() -> None:
 
         click.echo(
             f"{row['region']} | sources: {row['sources']} | {source_keys}"
+        )
+        
+        
+        
+        
+@main.command("check-regional-source-health")
+@click.option("--timeout", type=float, default=8.0, show_default=True)
+def check_regional_source_health_command(timeout: float) -> None:
+    """Check whether regional ecosystem source URLs are configured and reachable."""
+    results = check_regional_source_health(timeout=timeout)
+    summary = summarize_health_results(results)
+
+    click.echo("Regional source health check")
+    click.echo("============================")
+
+    for key, value in sorted(summary.items()):
+        click.echo(f"{key}: {value}")
+
+    click.echo("")
+
+    for result in results:
+        http_status = result.http_status if result.http_status is not None else ""
+        base_url = result.base_url or ""
+        error = result.error or ""
+
+        click.echo(
+            " | ".join(
+                [
+                    result.source_key,
+                    result.region or "",
+                    result.status,
+                    str(http_status),
+                    base_url,
+                    error,
+                ]
+            )
         )

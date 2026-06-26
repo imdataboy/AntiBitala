@@ -290,3 +290,99 @@ def validate_zone_coverage() -> dict[str, object]:
         "extra_regions": extra_regions,
         "coverage_by_region": coverage_by_region,
     }
+    
+    
+    
+def get_zone_status_counts() -> dict[str, int]:
+    """Return zone counts by verification status."""
+    with get_connection() as conn:
+        ensure_zone_metadata_columns(conn)
+
+        rows = conn.execute(
+            """
+            SELECT
+                COALESCE(verification_status, 'unknown') AS status,
+                COUNT(*) AS total
+            FROM zones
+            GROUP BY COALESCE(verification_status, 'unknown')
+            ORDER BY total DESC
+            """
+        ).fetchall()
+
+    return {row["status"]: int(row["total"]) for row in rows}
+
+
+def get_zone_region_summary() -> list[dict[str, object]]:
+    """Return zone coverage summary for all Moroccan regions."""
+    with get_connection() as conn:
+        ensure_zone_metadata_columns(conn)
+
+        rows = conn.execute(
+            """
+            SELECT
+                region,
+                COUNT(*) AS total_zones,
+                SUM(
+                    CASE
+                        WHEN verification_status = 'seed' THEN 1
+                        ELSE 0
+                    END
+                ) AS seed_zones,
+                SUM(
+                    CASE
+                        WHEN verification_status = 'provisional_seed' THEN 1
+                        ELSE 0
+                    END
+                ) AS provisional_seed_zones,
+                SUM(
+                    CASE
+                        WHEN verification_status = 'verified' THEN 1
+                        ELSE 0
+                    END
+                ) AS verified_zones,
+                SUM(
+                    CASE
+                        WHEN verification_status = 'needs_review' THEN 1
+                        ELSE 0
+                    END
+                ) AS needs_review_zones
+            FROM zones
+            WHERE region IS NOT NULL AND TRIM(region) != ''
+            GROUP BY region
+            """
+        ).fetchall()
+
+    by_region = {
+        row["region"]: {
+            "total_zones": int(row["total_zones"] or 0),
+            "seed_zones": int(row["seed_zones"] or 0),
+            "provisional_seed_zones": int(row["provisional_seed_zones"] or 0),
+            "verified_zones": int(row["verified_zones"] or 0),
+            "needs_review_zones": int(row["needs_review_zones"] or 0),
+        }
+        for row in rows
+    }
+
+    summary: list[dict[str, object]] = []
+
+    for region in MOROCCO_REGIONS:
+        values = by_region.get(
+            region,
+            {
+                "total_zones": 0,
+                "seed_zones": 0,
+                "provisional_seed_zones": 0,
+                "verified_zones": 0,
+                "needs_review_zones": 0,
+            },
+        )
+
+        summary.append(
+            {
+                "region": region,
+                **values,
+                "covered": values["total_zones"] > 0,
+            }
+        )
+
+    return summary

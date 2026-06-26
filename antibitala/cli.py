@@ -22,6 +22,17 @@ from antibitala.sources.industrial_estate import (
     inspect_industrial_estate_zones,
 )
 
+
+from antibitala.sources.company_zone_linker import (
+    get_company_zone_link_stats,
+    link_companies_to_zones,
+    migrate_company_zone_schema,
+    sample_company_zone_links,
+)
+
+
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 def main(ctx: click.Context) -> None:
@@ -333,3 +344,74 @@ def migrate_zones() -> None:
     click.echo("Added zone metadata columns:")
     for column in added_columns:
         click.echo(f"- {column}")
+        
+        
+        
+@main.command("migrate-company-zones")
+def migrate_company_zones() -> None:
+    """Add missing metadata columns to the company_zones table."""
+    added_columns = migrate_company_zone_schema()
+
+    if not added_columns:
+        click.echo("company_zones table already has all metadata columns.")
+        return
+
+    click.echo("Added company_zones metadata columns:")
+    for column in added_columns:
+        click.echo(f"- {column}")
+
+
+@main.command("link-company-zones")
+@click.option("--no-reset", is_flag=True, help="Do not delete old inferred links first.")
+@click.option("--max-links-per-company", type=int, default=3, show_default=True)
+@click.option("--limit", type=int, default=None, help="Limit companies for test runs.")
+def link_company_zones(
+    no_reset: bool,
+    max_links_per_company: int,
+    limit: int | None,
+) -> None:
+    """Infer company-zone links from city/region matching."""
+    count = link_companies_to_zones(
+        reset=not no_reset,
+        max_links_per_company=max_links_per_company,
+        limit=limit,
+    )
+
+    stats = get_company_zone_link_stats()
+
+    click.echo(f"Inserted {count} company-zone links.")
+    click.echo(f"Total company-zone links: {stats['total']}")
+
+    for key, value in stats.items():
+        if key == "total":
+            continue
+
+        click.echo(f"{key}: {value}")
+
+
+@main.command("inspect-company-zone-links")
+@click.option("--limit", type=int, default=30, show_default=True)
+def inspect_company_zone_links(limit: int) -> None:
+    """Inspect sample company-zone links."""
+    rows = sample_company_zone_links(limit=limit)
+
+    if not rows:
+        click.echo("No company-zone links found.")
+        return
+
+    for row in rows:
+        click.echo(
+            " | ".join(
+                [
+                    row["company_name"],
+                    row["company_city"] or "",
+                    row["company_region"] or "",
+                    row["sector_primary"] or "",
+                    row["zone_name"],
+                    row["zone_city"] or "",
+                    row["zone_region"] or "",
+                    str(row["confidence_score"]),
+                    row["link_type"] or "",
+                ]
+            )
+        )

@@ -98,6 +98,10 @@ CREATE TABLE IF NOT EXISTS company_zones (
     zone_id INTEGER NOT NULL,
     source_url TEXT,
     confidence_score INTEGER DEFAULT 0,
+    link_type TEXT DEFAULT 'unknown',
+    evidence TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
     PRIMARY KEY (company_id, zone_id),
     FOREIGN KEY (company_id) REFERENCES companies(company_id) ON DELETE CASCADE,
     FOREIGN KEY (zone_id) REFERENCES zones(zone_id) ON DELETE CASCADE

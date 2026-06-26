@@ -16,8 +16,42 @@ from antibitala.sources.industrial_zones import (
 )
 
 
+def non_empty_count(df: pd.DataFrame, column: str) -> int:
+    """Count non-empty values in a dataframe column."""
+    if column not in df.columns:
+        return 0
+
+    return int(
+        df[column]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .ne("")
+        .sum()
+    )
+
+
+
+def format_lead_status(row: pd.Series) -> str:
+    """Create a simple job-seeker status label."""
+    has_website = bool(str(row.get("website", "")).strip())
+    has_email = bool(str(row.get("public_email", "")).strip())
+    has_phone = bool(str(row.get("phone", "")).strip())
+
+    if has_email and has_website:
+        return "Good lead"
+
+    if has_email or has_phone:
+        return "Contactable"
+
+    if has_website:
+        return "Website only"
+
+    return "Needs enrichment"
+
+
 def rows_to_dataframe(rows: list) -> pd.DataFrame:
-    """Convert SQLite rows to a display dataframe."""
+    """Convert SQLite rows to a user-facing display dataframe."""
     data = [dict(row) for row in rows]
 
     display_columns = [
@@ -25,15 +59,10 @@ def rows_to_dataframe(rows: list) -> pd.DataFrame:
         "city",
         "region",
         "sector_primary",
-        "sector_secondary",
-        "company_type",
         "website",
         "public_email",
         "phone",
-        "trust_score",
-        "job_relevance_score",
-        "source_count",
-        "last_checked_date",
+        "lead_status",
     ]
 
     if not data:
@@ -41,65 +70,12 @@ def rows_to_dataframe(rows: list) -> pd.DataFrame:
 
     df = pd.DataFrame(data)
 
+    df["lead_status"] = df.apply(format_lead_status, axis=1)
+
     existing_columns = [column for column in display_columns if column in df.columns]
+
     return df[existing_columns]
 
-
-def render_company_cards(rows: list, max_cards: int = 30) -> None:
-    """Render user-friendly company cards."""
-    if not rows:
-        st.info("No companies found. Try changing the city, sector, or filters.")
-        return
-
-    st.caption(
-        f"Showing the first {min(len(rows), max_cards)} companies as cards. "
-        "Use the table view or export for the full list."
-    )
-
-    for row in rows[:max_cards]:
-        company = dict(row)
-
-        name = company.get("company_name") or "Unnamed company"
-        city = company.get("city") or "Unknown city"
-        region = company.get("region") or "Unknown region"
-        sector = company.get("sector_primary") or "Unknown sector"
-        company_type = company.get("company_type") or "Unknown type"
-
-        website = company.get("website")
-        email = company.get("public_email")
-        phone = company.get("phone")
-
-        trust_score = company.get("trust_score") or 0
-        job_score = company.get("job_relevance_score") or 0
-        source_count = company.get("source_count") or 0
-
-        with st.container(border=True):
-            st.markdown(f"### {name}")
-            st.caption(f"{city} • {region} • {sector} • {company_type}")
-
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
-            metric_col1.metric("Trust", trust_score)
-            metric_col2.metric("Job relevance", job_score)
-            metric_col3.metric("Sources", source_count)
-
-            contact_parts = []
-
-            if website:
-                contact_parts.append(f"[Website]({website})")
-
-            if email:
-                contact_parts.append(f"Email: `{email}`")
-
-            if phone:
-                contact_parts.append(f"Phone: `{phone}`")
-
-            if contact_parts:
-                st.markdown(" • ".join(contact_parts))
-            else:
-                st.write("No direct website, email, or phone found yet.")
-
-            if company.get("sector_secondary"):
-                st.caption(f"Details: {company['sector_secondary']}")
 
 
 def render_search_tab() -> None:
@@ -159,17 +135,13 @@ def render_search_tab() -> None:
 
     df = rows_to_dataframe(rows)
 
-    result_col1, result_col2, result_col3 = st.columns(3)
-    result_col1.metric("Results", len(df))
-    result_col2.metric(
-        "With website",
-        int(df["website"].notna().sum()) if "website" in df else 0,
-    )
-    result_col3.metric(
-        "With email",
-        int(df["public_email"].notna().sum()) if "public_email" in df else 0,
-    )
+    result_col1, result_col2, result_col3, result_col4 = st.columns(4)
 
+    result_col1.metric("Results", len(df))
+    result_col2.metric("With website", non_empty_count(df, "website"))
+    result_col3.metric("With email", non_empty_count(df, "public_email"))
+    result_col4.metric("With phone", non_empty_count(df, "phone"))
+    
     if df.empty:
         st.info("No companies found. Try changing the city, sector, or filters.")
     else:
@@ -178,19 +150,14 @@ def render_search_tab() -> None:
             use_container_width=True,
             hide_index=True,
             column_config={
-                "company_name": st.column_config.TextColumn("Company"),
-                "city": st.column_config.TextColumn("City"),
-                "region": st.column_config.TextColumn("Region"),
-                "sector_primary": st.column_config.TextColumn("Main sector"),
-                "sector_secondary": st.column_config.TextColumn("Details"),
-                "company_type": st.column_config.TextColumn("Type"),
-                "website": st.column_config.LinkColumn("Website"),
-                "public_email": st.column_config.TextColumn("Public email"),
-                "phone": st.column_config.TextColumn("Phone"),
-                "trust_score": st.column_config.NumberColumn("Trust"),
-                "job_relevance_score": st.column_config.NumberColumn("Job score"),
-                "source_count": st.column_config.NumberColumn("Sources"),
-                "last_checked_date": st.column_config.TextColumn("Last checked"),
+                "company_name": st.column_config.TextColumn("Company", width="medium"),
+                "city": st.column_config.TextColumn("City", width="small"),
+                "region": st.column_config.TextColumn("Region", width="medium"),
+                "sector_primary": st.column_config.TextColumn("Sector", width="medium"),
+                "website": st.column_config.LinkColumn("Website", width="medium"),
+                "public_email": st.column_config.TextColumn("Email", width="medium"),
+                "phone": st.column_config.TextColumn("Phone", width="small"),
+                "lead_status": st.column_config.TextColumn("Lead status", width="small"),
             },
         )
 

@@ -127,91 +127,117 @@ def search_companies(
     has_website: bool = False,
     has_email: bool = False,
     has_phone: bool = False,
+    has_zone_link: bool = False,
     limit: int = 200,
     db_path: Path | None = None,
 ) -> list[sqlite3.Row]:
-    """Search companies with simple filters."""
-    path = db_path or DB_PATH
+    """Search companies with optional filters."""
+    sql = """
+        SELECT
+            c.company_id,
+            c.company_name,
+            c.city,
+            c.region,
+            c.country,
+            c.sector_primary,
+            c.sector_secondary,
+            c.company_type,
+            c.website,
+            c.domain,
+            c.career_page,
+            c.contact_page,
+            c.public_email,
+            c.phone,
+            c.address,
+            c.trust_score,
+            c.job_relevance_score,
+            c.source_count,
+            c.last_checked_date,
+            zone_links.linked_zones,
+            zone_links.max_zone_confidence,
+            zone_links.zone_link_types
+        FROM companies c
+        LEFT JOIN (
+            SELECT
+                cz.company_id,
+                GROUP_CONCAT(z.zone_name, '; ') AS linked_zones,
+                MAX(cz.confidence_score) AS max_zone_confidence,
+                GROUP_CONCAT(DISTINCT cz.link_type) AS zone_link_types
+            FROM company_zones cz
+            JOIN zones z ON z.zone_id = cz.zone_id
+            GROUP BY cz.company_id
+        ) zone_links ON zone_links.company_id = c.company_id
+        WHERE 1 = 1
+    """
 
-    if not path.exists():
-        return []
-
-    where_clauses = []
     params: list[object] = []
 
     if query:
-        where_clauses.append(
-            """
-            (
-                company_name LIKE ?
-                OR normalized_name LIKE ?
-                OR sector_primary LIKE ?
-                OR sector_secondary LIKE ?
-                OR city LIKE ?
-                OR region LIKE ?
+        like_query = f"%{query.strip()}%"
+        sql += """
+            AND (
+                c.company_name LIKE ?
+                OR c.city LIKE ?
+                OR c.region LIKE ?
+                OR c.sector_primary LIKE ?
+                OR c.sector_secondary LIKE ?
+                OR c.company_type LIKE ?
+                OR c.website LIKE ?
+                OR c.public_email LIKE ?
+                OR c.address LIKE ?
+                OR zone_links.linked_zones LIKE ?
             )
-            """
-        )
-        search_value = f"%{query.strip()}%"
+        """
+        params.extend([like_query] * 10)
+
+    if city and city != "All":
+        sql += """
+            AND (
+                c.city = ?
+                OR c.city LIKE ?
+                OR c.city LIKE ?
+                OR c.city LIKE ?
+            )
+        """
         params.extend(
             [
-                search_value,
-                search_value,
-                search_value,
-                search_value,
-                search_value,
-                search_value,
+                city,
+                f"{city};%",
+                f"%;{city};%",
+                f"%;{city}",
             ]
         )
 
-    if city and city != "All":
-        where_clauses.append("city = ?")
-        params.append(city)
-
     if region and region != "All":
-        where_clauses.append("region = ?")
+        sql += " AND c.region = ?"
         params.append(region)
 
     if sector and sector != "All":
-        where_clauses.append("sector_primary = ?")
-        params.append(sector)
+        sql += " AND c.sector_primary LIKE ?"
+        params.append(f"%{sector}%")
 
     if has_website:
-        where_clauses.append("website IS NOT NULL AND TRIM(website) != ''")
+        sql += " AND c.website IS NOT NULL AND TRIM(c.website) != ''"
 
     if has_email:
-        where_clauses.append("public_email IS NOT NULL AND TRIM(public_email) != ''")
+        sql += " AND c.public_email IS NOT NULL AND TRIM(c.public_email) != ''"
 
     if has_phone:
-        where_clauses.append("phone IS NOT NULL AND TRIM(phone) != ''")
+        sql += " AND c.phone IS NOT NULL AND TRIM(c.phone) != ''"
 
-    where_sql = ""
-    if where_clauses:
-        where_sql = "WHERE " + " AND ".join(where_clauses)
+    if has_zone_link:
+        sql += " AND zone_links.linked_zones IS NOT NULL"
 
-    sql = f"""
-        SELECT
-            company_id,
-            company_name,
-            city,
-            region,
-            sector_primary,
-            sector_secondary,
-            company_type,
-            website,
-            public_email,
-            phone,
-            trust_score,
-            job_relevance_score,
-            source_count,
-            last_checked_date
-        FROM companies
-        {where_sql}
-        ORDER BY job_relevance_score DESC, trust_score DESC, company_name ASC
+    sql += """
+        ORDER BY
+            CASE WHEN zone_links.linked_zones IS NOT NULL THEN 1 ELSE 0 END DESC,
+            c.job_relevance_score DESC,
+            c.trust_score DESC,
+            c.source_count DESC,
+            c.company_name
         LIMIT ?
     """
-
     params.append(limit)
 
-    with get_connection(path) as conn:
+    with get_connection(db_path) as conn:
         return conn.execute(sql, params).fetchall()

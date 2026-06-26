@@ -16,7 +16,10 @@ from antibitala.sources.industrial_zones import (
     list_zones,
     validate_zone_coverage,
 )
-
+from antibitala.sources.industrial_estate import (
+    import_industrial_estate_zones,
+    inspect_industrial_estate_zones,
+)
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -285,3 +288,33 @@ def validate_zone_coverage_command() -> None:
         click.echo("\nNon-canonical region names found:")
         for region in extra_regions:
             click.echo(f"- {region}")
+
+@main.command("inspect-industrial-estate")
+@click.option("--pages", type=int, default=2, show_default=True)
+def inspect_industrial_estate(pages: int) -> None:
+    """Inspect Industrial Estate Morocco zones before import."""
+    zones = inspect_industrial_estate_zones(max_pages=pages)
+
+    click.echo(f"Loaded {len(zones)} Industrial Estate zones.")
+
+    for zone in zones:
+        click.echo(
+            " | ".join(
+                [
+                    zone.zone_name,
+                    zone.region or "",
+                    zone.city or "",
+                    zone.zone_type,
+                    zone.operator or "",
+                    zone.source_url,
+                ]
+            )
+        )
+
+
+@main.command("import-industrial-estate")
+@click.option("--pages", type=int, default=50, show_default=True)
+def import_industrial_estate(pages: int) -> None:
+    """Import official Industrial Estate Morocco zones."""
+    count = import_industrial_estate_zones(max_pages=pages)
+    click.echo(f"Imported {count} Industrial Estate zones.")

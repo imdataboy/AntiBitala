@@ -25,6 +25,7 @@ MOROCCO_REGIONS = [
     "Dakhla-Oued Ed-Dahab",
 ]
 
+
 @dataclass(frozen=True)
 class ZoneCandidate:
     zone_name: str

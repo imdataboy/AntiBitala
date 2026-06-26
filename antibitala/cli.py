@@ -11,6 +11,7 @@ from antibitala.sources.registry import list_data_sources, seed_data_sources
 from antibitala.sources.technopark import fetch_and_store_technopark
 from antibitala.exporters import export_companies
 from antibitala.sources.geofabrik_osm import fetch_and_store_osm, load_osm_candidates
+from antibitala.sources.industrial_zones import import_industrial_zones, list_zones
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -215,3 +216,36 @@ def fetch_osm(limit: int | None) -> None:
     """Import OSM employer candidates into the local database."""
     count = fetch_and_store_osm(limit=limit)
     click.echo(f"Fetched and stored {count} OSM employer candidates.")
+
+
+
+@main.command("import-zones")
+def import_zones() -> None:
+    """Import national industrial/economic zones."""
+    count = import_industrial_zones()
+    click.echo(f"Imported {count} industrial/economic zones.")
+
+
+@main.command("list-zones")
+def list_zones_command() -> None:
+    """List industrial/economic zones."""
+    rows = list_zones()
+
+    if not rows:
+        click.echo("No zones found.")
+        return
+
+    for row in rows:
+        click.echo(
+            " | ".join(
+                [
+                    str(row["zone_id"]),
+                    row["zone_name"],
+                    row["region"] or "",
+                    row["city"] or "",
+                    row["zone_type"] or "",
+                    row["operator"] or "",
+                    row["source_url"] or "",
+                ]
+            )
+        )

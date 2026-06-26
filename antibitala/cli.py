@@ -10,6 +10,7 @@ from antibitala.database.connection import DB_PATH, init_sqlite_database
 from antibitala.sources.registry import list_data_sources, seed_data_sources
 from antibitala.sources.technopark import fetch_and_store_technopark
 from antibitala.exporters import export_companies
+from antibitala.sources.geofabrik_osm import fetch_and_store_osm, load_osm_candidates
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -183,3 +184,34 @@ def export_data(export_format: str, output_path: Path | None) -> None:
     )
 
     click.echo(f"Exported companies to: {path}")
+
+@main.command("inspect-osm")
+@click.option("--limit", type=int, default=20, show_default=True)
+def inspect_osm(limit: int) -> None:
+    """Inspect filtered OSM employer candidates before import."""
+    candidates = load_osm_candidates(limit=limit)
+
+    click.echo(f"Loaded {len(candidates)} OSM candidates.")
+
+    for candidate in candidates:
+        click.echo(
+            " | ".join(
+                [
+                    candidate.company_name,
+                    candidate.city or "",
+                    candidate.sector_primary or "",
+                    candidate.sector_secondary or "",
+                    candidate.website or "",
+                    candidate.public_email or "",
+                    candidate.source_url,
+                ]
+            )
+        )
+
+
+@main.command("fetch-osm")
+@click.option("--limit", type=int, default=None, help="Maximum OSM candidates to import.")
+def fetch_osm(limit: int | None) -> None:
+    """Import OSM employer candidates into the local database."""
+    count = fetch_and_store_osm(limit=limit)
+    click.echo(f"Fetched and stored {count} OSM employer candidates.")

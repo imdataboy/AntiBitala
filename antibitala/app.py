@@ -16,29 +16,37 @@ from antibitala.sources.industrial_zones import (
 )
 
 
+def has_value(value: object) -> bool:
+    """Return True when a dataframe cell contains useful text."""
+    if value is None:
+        return False
+
+    try:
+        if pd.isna(value):
+            return False
+    except TypeError:
+        pass
+
+    cleaned = str(value).strip().lower()
+
+    return cleaned not in {"", "none", "null", "nan"}
+
+
 def non_empty_count(df: pd.DataFrame, column: str) -> int:
     """Count non-empty values in a dataframe column."""
     if column not in df.columns:
         return 0
 
-    return int(
-        df[column]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .ne("")
-        .sum()
-    )
-
+    return int(df[column].apply(has_value).sum())
 
 
 def format_lead_status(row: pd.Series) -> str:
-    """Create a simple job-seeker status label."""
-    has_website = bool(str(row.get("website", "")).strip())
-    has_email = bool(str(row.get("public_email", "")).strip())
-    has_phone = bool(str(row.get("phone", "")).strip())
+    """Create a simple job-seeker contactability label."""
+    has_website = has_value(row.get("website"))
+    has_email = has_value(row.get("public_email"))
+    has_phone = has_value(row.get("phone"))
 
-    if has_email and has_website:
+    if has_website and has_email:
         return "Good lead"
 
     if has_email or has_phone:
@@ -48,6 +56,41 @@ def format_lead_status(row: pd.Series) -> str:
         return "Website only"
 
     return "Needs enrichment"
+
+
+def lead_status_rank(status: str) -> int:
+    """Rank lead status for sorting."""
+    ranks = {
+        "Good lead": 4,
+        "Contactable": 3,
+        "Website only": 2,
+        "Needs enrichment": 1,
+    }
+
+    return ranks.get(status, 0)
+
+
+def apply_lead_quality_filter(
+    df: pd.DataFrame,
+    lead_quality: str,
+) -> pd.DataFrame:
+    """Apply lead quality filter to the display dataframe."""
+    if df.empty or lead_quality == "All":
+        return df
+
+    if lead_quality == "Good lead":
+        return df[df["lead_status"] == "Good lead"]
+
+    if lead_quality == "Contactable":
+        return df[df["lead_status"].isin(["Good lead", "Contactable"])]
+
+    if lead_quality == "Website only":
+        return df[df["lead_status"] == "Website only"]
+
+    if lead_quality == "Needs enrichment":
+        return df[df["lead_status"] == "Needs enrichment"]
+
+    return df
 
 
 def rows_to_dataframe(rows: list) -> pd.DataFrame:
@@ -71,17 +114,22 @@ def rows_to_dataframe(rows: list) -> pd.DataFrame:
     df = pd.DataFrame(data)
 
     df["lead_status"] = df.apply(format_lead_status, axis=1)
+    df["lead_rank"] = df["lead_status"].apply(lead_status_rank)
+
+    df = df.sort_values(
+        by=["lead_rank", "company_name"],
+        ascending=[False, True],
+    )
 
     existing_columns = [column for column in display_columns if column in df.columns]
 
     return df[existing_columns]
 
 
-
 def render_search_tab() -> None:
     """Render the job seeker search experience."""
-
-
+    stats = get_database_stats()
+    total_companies = int(stats["companies"] or 0)
 
     options = get_company_filter_options()
 
@@ -114,13 +162,41 @@ def render_search_tab() -> None:
         has_email = st.checkbox("Only companies with public email")
         has_phone = st.checkbox("Only companies with phone")
 
-        limit = st.slider(
-            "Maximum results",
-            min_value=20,
-            max_value=500,
-            value=200,
-            step=20,
+        lead_quality = st.selectbox(
+            "Lead quality",
+            [
+                "All",
+                "Good lead",
+                "Contactable",
+                "Website only",
+                "Needs enrichment",
+            ],
         )
+
+        if total_companies <= 500:
+            min_results = 1
+            max_results = max(1, total_companies)
+            default_limit = min(200, max_results)
+            step = 1
+        else:
+            min_results = 20
+            max_results = total_companies
+            default_limit = 200
+            step = 20
+
+        limit = st.slider(
+            f"Maximum results / DB size: {total_companies}",
+            min_value=min_results,
+            max_value=max_results,
+            value=default_limit,
+            step=step,
+        )
+
+    # Important:
+    # If lead quality is selected, we fetch a larger pool first,
+    # then filter in pandas. Otherwise, "Contactable" could show 0 only
+    # because the first SQL-limited rows did not contain that status.
+    search_limit = total_companies if lead_quality != "All" else limit
 
     rows = search_companies(
         query=query,
@@ -130,10 +206,12 @@ def render_search_tab() -> None:
         has_website=has_website,
         has_email=has_email,
         has_phone=has_phone,
-        limit=limit,
+        limit=search_limit,
     )
 
     df = rows_to_dataframe(rows)
+    df = apply_lead_quality_filter(df, lead_quality)
+    df = df.head(limit)
 
     result_col1, result_col2, result_col3, result_col4 = st.columns(4)
 
@@ -141,7 +219,24 @@ def render_search_tab() -> None:
     result_col2.metric("With website", non_empty_count(df, "website"))
     result_col3.metric("With email", non_empty_count(df, "public_email"))
     result_col4.metric("With phone", non_empty_count(df, "phone"))
-    
+
+    st.caption(
+        "Lead quality logic: Good lead = website + email; "
+        "Contactable = email or phone; Website only = website without direct contact; "
+        "Needs enrichment = no website, email, or phone."
+    )
+
+    if not df.empty:
+        lead_counts = df["lead_status"].value_counts().to_dict()
+
+        st.caption(
+            "Current results: "
+            + " | ".join(
+                f"{status}: {count}"
+                for status, count in lead_counts.items()
+            )
+        )
+
     if df.empty:
         st.info("No companies found. Try changing the city, sector, or filters.")
     else:
@@ -150,14 +245,38 @@ def render_search_tab() -> None:
             use_container_width=True,
             hide_index=True,
             column_config={
-                "company_name": st.column_config.TextColumn("Company", width="medium"),
-                "city": st.column_config.TextColumn("City", width="small"),
-                "region": st.column_config.TextColumn("Region", width="medium"),
-                "sector_primary": st.column_config.TextColumn("Sector", width="medium"),
-                "website": st.column_config.LinkColumn("Website", width="medium"),
-                "public_email": st.column_config.TextColumn("Email", width="medium"),
-                "phone": st.column_config.TextColumn("Phone", width="small"),
-                "lead_status": st.column_config.TextColumn("Lead status", width="small"),
+                "company_name": st.column_config.TextColumn(
+                    "Company",
+                    width="medium",
+                ),
+                "city": st.column_config.TextColumn(
+                    "City",
+                    width="small",
+                ),
+                "region": st.column_config.TextColumn(
+                    "Region",
+                    width="medium",
+                ),
+                "sector_primary": st.column_config.TextColumn(
+                    "Sector",
+                    width="medium",
+                ),
+                "website": st.column_config.LinkColumn(
+                    "Website",
+                    width="medium",
+                ),
+                "public_email": st.column_config.TextColumn(
+                    "Email",
+                    width="medium",
+                ),
+                "phone": st.column_config.TextColumn(
+                    "Phone",
+                    width="small",
+                ),
+                "lead_status": st.column_config.TextColumn(
+                    "Lead status",
+                    width="small",
+                ),
             },
         )
 

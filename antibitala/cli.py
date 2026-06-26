@@ -11,7 +11,12 @@ from antibitala.sources.registry import list_data_sources, seed_data_sources
 from antibitala.sources.technopark import fetch_and_store_technopark
 from antibitala.exporters import export_companies
 from antibitala.sources.geofabrik_osm import fetch_and_store_osm, load_osm_candidates
-from antibitala.sources.industrial_zones import import_industrial_zones, list_zones
+from antibitala.sources.industrial_zones import (
+    import_industrial_zones,
+    list_zones,
+    validate_zone_coverage,
+)
+
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -249,3 +254,34 @@ def list_zones_command() -> None:
                 ]
             )
         )
+
+@main.command("validate-zone-coverage")
+def validate_zone_coverage_command() -> None:
+    """Validate zone coverage across Moroccan regions."""
+    coverage = validate_zone_coverage()
+
+    click.echo(
+        f"Covered regions: {coverage['covered_count']}/{coverage['total_regions']}"
+    )
+
+    click.echo("\nCoverage by region:")
+    coverage_by_region = coverage["coverage_by_region"]
+
+    for region in coverage["covered_regions"]:
+        click.echo(f"- {region}: {coverage_by_region.get(region, 0)}")
+
+    missing_regions = coverage["missing_regions"]
+
+    if missing_regions:
+        click.echo("\nMissing regions:")
+        for region in missing_regions:
+            click.echo(f"- {region}")
+    else:
+        click.echo("\nNo missing regions.")
+
+    extra_regions = coverage["extra_regions"]
+
+    if extra_regions:
+        click.echo("\nNon-canonical region names found:")
+        for region in extra_regions:
+            click.echo(f"- {region}")

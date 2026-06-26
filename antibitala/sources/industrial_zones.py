@@ -10,7 +10,20 @@ from antibitala.database.connection import get_connection
 
 
 ZONES_YAML_PATH = Path("antibitala/sources/morocco_industrial_zones.yaml")
-
+MOROCCO_REGIONS = [
+    "Casablanca-Settat",
+    "Rabat-Salé-Kénitra",
+    "Tanger-Tétouan-Al Hoceïma",
+    "Marrakech-Safi",
+    "Souss-Massa",
+    "Fès-Meknès",
+    "Oriental",
+    "Béni Mellal-Khénifra",
+    "Drâa-Tafilalet",
+    "Guelmim-Oued Noun",
+    "Laâyoune-Sakia El Hamra",
+    "Dakhla-Oued Ed-Dahab",
+]
 
 @dataclass(frozen=True)
 class ZoneCandidate:
@@ -181,3 +194,40 @@ def list_zones() -> list[sqlite3.Row]:
             ORDER BY region, city, zone_name
             """
         ).fetchall()
+
+
+def validate_zone_coverage() -> dict[str, object]:
+    """Validate industrial/economic zone coverage across Moroccan regions."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT region, COUNT(*) AS total
+            FROM zones
+            WHERE region IS NOT NULL AND TRIM(region) != ''
+            GROUP BY region
+            ORDER BY region
+            """
+        ).fetchall()
+
+    coverage_by_region = {row["region"]: int(row["total"]) for row in rows}
+
+    covered_regions = [
+        region for region in MOROCCO_REGIONS if coverage_by_region.get(region, 0) > 0
+    ]
+
+    missing_regions = [
+        region for region in MOROCCO_REGIONS if coverage_by_region.get(region, 0) == 0
+    ]
+
+    extra_regions = [
+        region for region in coverage_by_region if region not in MOROCCO_REGIONS
+    ]
+
+    return {
+        "total_regions": len(MOROCCO_REGIONS),
+        "covered_count": len(covered_regions),
+        "covered_regions": covered_regions,
+        "missing_regions": missing_regions,
+        "extra_regions": extra_regions,
+        "coverage_by_region": coverage_by_region,
+    }

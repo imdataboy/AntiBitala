@@ -11,31 +11,11 @@ from antibitala.sources.registry import list_data_sources, seed_data_sources
 from antibitala.sources.technopark import fetch_and_store_technopark
 from antibitala.exporters import export_companies
 from antibitala.sources.geofabrik_osm import fetch_and_store_osm, load_osm_candidates
-from antibitala.sources.industrial_zones import (
-    import_industrial_zones,
-    list_zones,
-    migrate_zone_schema,
-    validate_zone_coverage,
-)
-from antibitala.sources.industrial_estate import (
-    import_industrial_estate_zones,
-    inspect_industrial_estate_zones,
-)
-
-
-from antibitala.sources.company_zone_linker import (
-    get_company_zone_link_stats,
-    link_companies_to_zones,
-    migrate_company_zone_schema,
-    sample_company_zone_links,
-)
-
-from antibitala.sources.contact_sync import (
-    get_contact_stats,
-    sample_contacts,
-    sync_company_contacts,
-)
-
+from antibitala.sources.industrial_zones import import_industrial_zones, list_zones, migrate_zone_schema,validate_zone_coverage
+from antibitala.sources.industrial_estate import import_industrial_estate_zones, inspect_industrial_estate_zones
+from antibitala.sources.company_zone_linker import get_company_zone_link_stats, link_companies_to_zones, migrate_company_zone_schema, sample_company_zone_links
+from antibitala.sources.contact_sync import get_contact_stats, sample_contacts, sync_company_contacts
+from antibitala.sources.regional_ecosystems import get_regional_source_summary, get_regional_sources, validate_regional_source_coverage
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -466,4 +446,58 @@ def inspect_contacts(limit: int) -> None:
                     row["contact_source_url"] or "",
                 ]
             )
+        )
+        
+        
+@main.command("list-regional-sources")
+def list_regional_sources() -> None:
+    """List enabled regional ecosystem/CRI sources."""
+    sources = get_regional_sources()
+
+    if not sources:
+        click.echo("No regional sources found.")
+        return
+
+    for source in sources:
+        click.echo(
+            " | ".join(
+                [
+                    source["source_key"],
+                    source["source_name"],
+                    source["region"] or "",
+                    source["coverage_scope"] or "",
+                    source["reliability_level"] or "",
+                    source["base_url"] or "",
+                ]
+            )
+        )
+
+
+@main.command("validate-regional-coverage")
+def validate_regional_coverage() -> None:
+    """Validate source coverage across all 12 Moroccan regions."""
+    coverage = validate_regional_source_coverage()
+    summary = get_regional_source_summary()
+
+    click.echo(
+        f"Regional source coverage: "
+        f"{coverage['covered_count']}/{coverage['total_regions']}"
+    )
+    click.echo(f"Regional sources found: {coverage['sources_count']}")
+
+    if coverage["missing_regions"]:
+        click.echo("Missing regions:")
+        for region in coverage["missing_regions"]:
+            click.echo(f"- {region}")
+    else:
+        click.echo("All 12 Moroccan regions have at least one enabled regional source.")
+
+    click.echo("")
+    click.echo("Region summary:")
+
+    for row in summary:
+        source_keys = ", ".join(row["source_keys"])
+
+        click.echo(
+            f"{row['region']} | sources: {row['sources']} | {source_keys}"
         )

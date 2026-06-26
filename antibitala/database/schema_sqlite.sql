@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS zones (
     source_url TEXT,
     latitude REAL,
     longitude REAL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     verification_status TEXT DEFAULT 'seed',
     last_verified_date TEXT,
     notes TEXT,

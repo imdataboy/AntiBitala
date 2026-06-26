@@ -30,7 +30,11 @@ from antibitala.sources.company_zone_linker import (
     sample_company_zone_links,
 )
 
-
+from antibitala.sources.contact_sync import (
+    get_contact_stats,
+    sample_contacts,
+    sync_company_contacts,
+)
 
 
 @click.group(invoke_without_command=True)
@@ -412,6 +416,54 @@ def inspect_company_zone_links(limit: int) -> None:
                     row["zone_region"] or "",
                     str(row["confidence_score"]),
                     row["link_type"] or "",
+                ]
+            )
+        )
+        
+        
+        
+@main.command("sync-contacts")
+@click.option("--limit", type=int, default=None, help="Limit companies for test runs.")
+def sync_contacts(limit: int | None) -> None:
+    """Sync contacts from companies table into company_contacts."""
+    result = sync_company_contacts(limit=limit)
+    stats = get_contact_stats()
+
+    click.echo("Contact sync completed.")
+    click.echo(f"Companies scanned: {result['companies_scanned']}")
+    click.echo(f"Candidates seen: {result['candidates_seen']}")
+    click.echo(f"Inserted: {result['inserted']}")
+    click.echo(f"Updated: {result['updated']}")
+    click.echo(f"Total contacts: {stats['total']}")
+
+    for key, value in stats.items():
+        if key == "total":
+            continue
+
+        click.echo(f"{key}: {value}")
+
+
+@main.command("inspect-contacts")
+@click.option("--limit", type=int, default=30, show_default=True)
+def inspect_contacts(limit: int) -> None:
+    """Inspect normalized company contacts."""
+    rows = sample_contacts(limit=limit)
+
+    if not rows:
+        click.echo("No contacts found.")
+        return
+
+    for row in rows:
+        click.echo(
+            " | ".join(
+                [
+                    row["company_name"],
+                    row["city"] or "",
+                    row["region"] or "",
+                    row["contact_type"],
+                    row["contact_value"],
+                    str(row["confidence_score"]),
+                    row["contact_source_url"] or "",
                 ]
             )
         )

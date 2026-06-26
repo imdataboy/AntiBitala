@@ -71,3 +71,147 @@ def get_database_stats(db_path: Path | None = None) -> dict[str, int]:
         }
 
     return stats
+
+
+def get_company_filter_options(db_path: Path | None = None) -> dict[str, list[str]]:
+    """Return filter options for the app."""
+    path = db_path or DB_PATH
+
+    if not path.exists():
+        return {
+            "cities": [],
+            "regions": [],
+            "sectors": [],
+        }
+
+    with get_connection(path) as conn:
+        cities = conn.execute(
+            """
+            SELECT DISTINCT city
+            FROM companies
+            WHERE city IS NOT NULL AND TRIM(city) != ''
+            ORDER BY city
+            """
+        ).fetchall()
+
+        regions = conn.execute(
+            """
+            SELECT DISTINCT region
+            FROM companies
+            WHERE region IS NOT NULL AND TRIM(region) != ''
+            ORDER BY region
+            """
+        ).fetchall()
+
+        sectors = conn.execute(
+            """
+            SELECT DISTINCT sector_primary
+            FROM companies
+            WHERE sector_primary IS NOT NULL AND TRIM(sector_primary) != ''
+            ORDER BY sector_primary
+            """
+        ).fetchall()
+
+    return {
+        "cities": [row["city"] for row in cities],
+        "regions": [row["region"] for row in regions],
+        "sectors": [row["sector_primary"] for row in sectors],
+    }
+
+
+def search_companies(
+    query: str | None = None,
+    city: str | None = None,
+    region: str | None = None,
+    sector: str | None = None,
+    has_website: bool = False,
+    has_email: bool = False,
+    has_phone: bool = False,
+    limit: int = 200,
+    db_path: Path | None = None,
+) -> list[sqlite3.Row]:
+    """Search companies with simple filters."""
+    path = db_path or DB_PATH
+
+    if not path.exists():
+        return []
+
+    where_clauses = []
+    params: list[object] = []
+
+    if query:
+        where_clauses.append(
+            """
+            (
+                company_name LIKE ?
+                OR normalized_name LIKE ?
+                OR sector_primary LIKE ?
+                OR sector_secondary LIKE ?
+                OR city LIKE ?
+                OR region LIKE ?
+            )
+            """
+        )
+        search_value = f"%{query.strip()}%"
+        params.extend(
+            [
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+            ]
+        )
+
+    if city and city != "All":
+        where_clauses.append("city = ?")
+        params.append(city)
+
+    if region and region != "All":
+        where_clauses.append("region = ?")
+        params.append(region)
+
+    if sector and sector != "All":
+        where_clauses.append("sector_primary = ?")
+        params.append(sector)
+
+    if has_website:
+        where_clauses.append("website IS NOT NULL AND TRIM(website) != ''")
+
+    if has_email:
+        where_clauses.append("public_email IS NOT NULL AND TRIM(public_email) != ''")
+
+    if has_phone:
+        where_clauses.append("phone IS NOT NULL AND TRIM(phone) != ''")
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+    sql = f"""
+        SELECT
+            company_id,
+            company_name,
+            city,
+            region,
+            sector_primary,
+            sector_secondary,
+            company_type,
+            website,
+            public_email,
+            phone,
+            trust_score,
+            job_relevance_score,
+            source_count,
+            last_checked_date
+        FROM companies
+        {where_sql}
+        ORDER BY job_relevance_score DESC, trust_score DESC, company_name ASC
+        LIMIT ?
+    """
+
+    params.append(limit)
+
+    with get_connection(path) as conn:
+        return conn.execute(sql, params).fetchall()

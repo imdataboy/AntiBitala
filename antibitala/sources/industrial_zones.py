@@ -25,6 +25,12 @@ MOROCCO_REGIONS = [
     "Dakhla-Oued Ed-Dahab",
 ]
 
+ZONE_METADATA_COLUMNS = {
+    "verification_status": "TEXT DEFAULT 'seed'",
+    "last_verified_date": "TEXT",
+    "notes": "TEXT",
+    "updated_at": "TEXT",
+}
 
 @dataclass(frozen=True)
 class ZoneCandidate:
@@ -36,7 +42,38 @@ class ZoneCandidate:
     source_url: str
     latitude: float | None = None
     longitude: float | None = None
+    verification_status: str = "seed"
+    last_verified_date: str | None = None
+    notes: str | None = None
 
+def ensure_zone_metadata_columns(conn: sqlite3.Connection) -> list[str]:
+    """Add zone metadata columns if the local database is older."""
+    existing_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(zones)").fetchall()
+    }
+
+    added_columns: list[str] = []
+
+    for column_name, column_definition in ZONE_METADATA_COLUMNS.items():
+        if column_name in existing_columns:
+            continue
+
+        conn.execute(
+            f"ALTER TABLE zones ADD COLUMN {column_name} {column_definition}"
+        )
+        added_columns.append(column_name)
+
+    return added_columns
+
+
+def migrate_zone_schema() -> list[str]:
+    """Migrate the zones table for metadata/verification fields."""
+    with get_connection() as conn:
+        added_columns = ensure_zone_metadata_columns(conn)
+        conn.commit()
+
+    return added_columns
 
 def load_zone_candidates(path: Path = ZONES_YAML_PATH) -> list[ZoneCandidate]:
     """Load industrial/economic zone candidates from YAML."""
@@ -67,6 +104,9 @@ def load_zone_candidates(path: Path = ZONES_YAML_PATH) -> list[ZoneCandidate]:
                 source_url=source_url,
                 latitude=zone.get("latitude"),
                 longitude=zone.get("longitude"),
+                verification_status=zone.get("verification_status", "seed"),
+                last_verified_date=zone.get("last_verified_date"),
+                notes=zone.get("notes"),
             )
         )
 
@@ -99,7 +139,11 @@ def upsert_zone(conn: sqlite3.Connection, candidate: ZoneCandidate) -> int:
                 operator = COALESCE(?, operator),
                 source_url = COALESCE(?, source_url),
                 latitude = COALESCE(?, latitude),
-                longitude = COALESCE(?, longitude)
+                longitude = COALESCE(?, longitude),
+                verification_status = COALESCE(?, verification_status),
+                last_verified_date = COALESCE(?, last_verified_date),
+                notes = COALESCE(?, notes),
+                updated_at = CURRENT_TIMESTAMP
             WHERE zone_id = ?
             """,
             (
@@ -110,6 +154,9 @@ def upsert_zone(conn: sqlite3.Connection, candidate: ZoneCandidate) -> int:
                 candidate.source_url,
                 candidate.latitude,
                 candidate.longitude,
+                candidate.verification_status,
+                candidate.last_verified_date,
+                candidate.notes,
                 zone_id,
             ),
         )
@@ -126,9 +173,13 @@ def upsert_zone(conn: sqlite3.Connection, candidate: ZoneCandidate) -> int:
             operator,
             source_url,
             latitude,
-            longitude
+            longitude,
+            verification_status,
+            last_verified_date,
+            notes,
+            updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """,
         (
             candidate.zone_name,
@@ -139,6 +190,9 @@ def upsert_zone(conn: sqlite3.Connection, candidate: ZoneCandidate) -> int:
             candidate.source_url,
             candidate.latitude,
             candidate.longitude,
+            candidate.verification_status,
+            candidate.last_verified_date,
+            candidate.notes,
         ),
     )
 
@@ -152,6 +206,7 @@ def import_industrial_zones() -> int:
     imported = 0
 
     with get_connection() as conn:
+        ensure_zone_metadata_columns(conn)
         for candidate in candidates:
             upsert_zone(conn, candidate)
             imported += 1
@@ -190,7 +245,10 @@ def list_zones() -> list[sqlite3.Row]:
                 city,
                 zone_type,
                 operator,
-                source_url
+                source_url,
+                verification_status,
+                last_verified_date,
+                notes
             FROM zones
             ORDER BY region, city, zone_name
             """

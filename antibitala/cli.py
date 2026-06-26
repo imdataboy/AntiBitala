@@ -14,6 +14,7 @@ from antibitala.sources.geofabrik_osm import fetch_and_store_osm, load_osm_candi
 from antibitala.sources.industrial_zones import (
     import_industrial_zones,
     list_zones,
+    migrate_zone_schema,
     validate_zone_coverage,
 )
 from antibitala.sources.industrial_estate import (
@@ -253,6 +254,7 @@ def list_zones_command() -> None:
                     row["city"] or "",
                     row["zone_type"] or "",
                     row["operator"] or "",
+                    row["verification_status"] or "",
                     row["source_url"] or "",
                 ]
             )
@@ -318,3 +320,16 @@ def import_industrial_estate(pages: int) -> None:
     """Import official Industrial Estate Morocco zones."""
     count = import_industrial_estate_zones(max_pages=pages)
     click.echo(f"Imported {count} Industrial Estate zones.")
+
+@main.command("migrate-zones")
+def migrate_zones() -> None:
+    """Add missing metadata columns to the zones table."""
+    added_columns = migrate_zone_schema()
+
+    if not added_columns:
+        click.echo("Zones table already has all metadata columns.")
+        return
+
+    click.echo("Added zone metadata columns:")
+    for column in added_columns:
+        click.echo(f"- {column}")
